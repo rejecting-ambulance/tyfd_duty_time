@@ -12,8 +12,8 @@ import calendar
 import time
 import sys
 import os
-################版本資訊################
-##################5.1##################
+################版本資訊##################
+#############v.6 &360recon###############
 ################函數大大們################
 #補0
 def add_zero(cc):
@@ -26,7 +26,7 @@ def alert_click():
     try:
         time.sleep(0.2)
         alert = driver.switch_to.alert
-        print(f'  {alert.text}')
+        print(f'  Ignore MSG: {alert.text}')
         alert.accept()
     except:
         None
@@ -86,7 +86,7 @@ def setting_loading(file_name, user_book):
     ws = wb[user_book]
 
     duty_dict = {}
-    for i in range(2, 39, 6):  # 每 6 行一組
+    for i in range(2, 55, 6):  # 每 6 行一組
         duty_name = str(ws[f'B{i}'].value)
         if duty_name == 'None':  
             break
@@ -106,7 +106,7 @@ def setting_loading(file_name, user_book):
 
         duty_dict[duty_name] = rest_list
     
-    for i in range(2, 39, 6):  # 每 6 行一組
+    for i in range(2, 55, 6):  # 每 6 行一組
         duty_name = str(ws[f'H{i}'].value)
         if duty_name == 'None':  
             break
@@ -136,10 +136,10 @@ def duty_loading(file_name, user_book, days):
         d = i+2
         date = str(i+1)
 
-        #將班別.A起A迄.B起B迄整理為陣列(C~G欄)
+        #將班別.A起A迄.B起B迄.備註整理為陣列(C~H欄)
         arr = [
                 str(ws[f'{get_column_letter(q+3)}{d}'].value) or ""  # 若為 None 則設為空字串
-                for q in range(5)
+                for q in range(6)
             ]
         #arr[0]：班別
         if arr[0] == 'None':
@@ -152,7 +152,7 @@ def duty_loading(file_name, user_book, days):
 
 #輸入函式(輸入內容陣列、日期)
 def time_function(date_num,cont_arr, day_arr):
-    #ID_arr = ['_selOFFTYPE', '_selLEAVETYPE', '_selTASKDATE', '_selDATES', '_selTASKHOURS', '_selDATEE', '_selTASKHOURE']
+    #ID_arr = ['_selOFFTYPE', '_selLEAVETYPE', '_selTASKDATE', '_selDATES', '_selTASKHOURS', '_selDATEE', '_selTASKHOURE', '_txtNoqkMemo']
     for p in range(len(cont_arr)):
         day_or_hour = cont_arr[p][0]
         kind = cont_arr[p][1]
@@ -212,6 +212,13 @@ def time_function(date_num,cont_arr, day_arr):
         #時段(起)
         dropdown_by_index('_selDATES',date_num_st)
         dropdown_by_value('_selTASKHOURS',time_st)
+        
+        #備註
+        if day_arr[5] != 'None':
+            memo = day_arr[5]
+            id = '_txtNoqkMemo'
+            send_value_by_id(id, memo)
+       
 
         #新增
         click_by_id('_btnInsert')
@@ -235,6 +242,7 @@ def duplication_clear():
             
             if matrix == matrixx:
                 print(f'刪除 {m}：{matrix}')
+                #print(f'刪除 {m}： {matrix[2]} 日：{matrix[0]}-{matrix[1]}：{matrix[3]}{matrix[4]}')
                 xpp = f'/html/body/form/table/tbody/tr[4]/td/table[1]/tbody/tr[{m}]/td[10]/input[2]'
                 del_button = driver.find_element(By.XPATH,xpp)
                 del_button.click()
@@ -242,6 +250,7 @@ def duplication_clear():
                 alert_click()
         except:
             continue
+    print('重複內容刪除完成')
     return 0
 
 #刪除全部
@@ -249,12 +258,13 @@ def del_all():
     for m in range(200,3,-1):
         matrix = []
         try:
-            for n in range(1,6):
+            for n in range(1,8):
                 xp = f'//*[@id="frm"]/table/tbody/tr[4]/td/table[1]/tbody/tr[{m}]/td[{n}]'
                 temp = driver.find_element(By.XPATH, xp).text
                 matrix.append(temp)
 
             print(f'刪除{m-3}：{matrix}')
+            #print(f'刪除 {m-3}： {matrix[2]} 日：{matrix[0]}-{matrix[1]}：{matrix[3]}{matrix[4]}')
             xpp = f'/html/body/form/table/tbody/tr[4]/td/table[1]/tbody/tr[{m}]/td[10]/input[2]'
             del_button = driver.find_element(By.XPATH,xpp)
             del_button.click()
@@ -263,6 +273,55 @@ def del_all():
         except:
             continue
     return 0
+
+# 檢核是否有時數重疊
+def time_overlap(start1, end1, start2, end2):
+    return max(start1, start2) < min(end1, end2)
+
+def overlap_check():
+
+    for m in range(200, 3, -1):
+        matrix = []
+        matrixx = []
+
+        try:
+            # 讀取第 m 筆
+            for n in range(1, 6):
+                xp = f'//*[@id="frm"]/table/tbody/tr[4]/td/table[1]/tbody/tr[{m}]/td[{n}]'
+                matrix.append(driver.find_element(By.XPATH, xp).text)
+
+                xp2 = f'//*[@id="frm"]/table/tbody/tr[4]/td/table[1]/tbody/tr[{m-1}]/td[{n}]'
+                matrixx.append(driver.find_element(By.XPATH, xp2).text)
+
+            # -------- 判斷開始 --------
+
+            # 只處理「小時假」
+            if matrix[0] != '小時假' or matrixx[0] != '小時假':
+                continue
+
+            # 日期需相同
+            if matrix[2] != matrixx[2]:
+                continue
+
+            # 轉成整數時間
+            s1, e1 = int(matrix[3]), int(matrix[4])
+            s2, e2 = int(matrixx[3]), int(matrixx[4])
+
+            if time_overlap(s1, e1, s2, e2):
+                print(f'⚠ 時數重疊：')
+                print(f'  第 {m-1} 筆：{matrixx}')
+                print(f'  第 {m} 筆：{matrix}')
+
+                # 若要「標註」而非只是 print，可在這裡處理
+                # 例如：點擊編輯 → 備註欄填入「時間重疊」
+
+        except Exception as e:
+            continue
+    print('重疊時數檢查完成')
+    return 0
+
+
+
 def dropdown_by_value(id = str, value = str):
     dropdown1 = wait.until(EC.visibility_of_element_located((By.ID, id)))   
     dropdown_sheet1 = Select(dropdown1)
@@ -281,6 +340,11 @@ def click_by_name(name = str):
     button1 = driver.find_element(By.NAME, name)
     button1.click()
 
+def send_value_by_id(id = str, value = str):
+    input_box = driver.find_element(By.ID, id)
+    input_box.clear()
+    input_box.send_keys(value)
+
 def str_line(show = str):
     max_len = 50
     dash_len = int((max_len - len(show))/2)
@@ -293,11 +357,11 @@ def str_line(show = str):
 ################################################主程式################################################
 if __name__ == '__main__':
 
-    print(str_line("嗨，我是打基準表小精靈5.1，來完成任務吧"))   #版本號更新於此
+    print(str_line("嗨，我是打基準表小精靈6，來完成任務吧"))   #版本號更新於此
     time.sleep(0.5)
 
     #檢測指定Excel是否存在
-    file_name = "個人基準表vvcd.xlsm"
+    file_name = "個人基準表360recon.xlsm"
     user_book = "日曆_輸入區"
     duty_book = "假別_設定區"
     #setting_name = "setting_py"
@@ -314,7 +378,7 @@ if __name__ == '__main__':
     elif check_msg == '檔案被占用':
         print('Excel開啟中，請先存檔關閉再執行喔')
         time.sleep(2)
-        raise PermissionError
+        raise PermissionError 
 
     #讀取Excel內容
     #data字典：[name,account,password,month,year,days]
@@ -325,12 +389,17 @@ if __name__ == '__main__':
     #讀取假別列表 
     duty_dict = setting_loading(file_path, duty_book)
 
+
     #選擇是否刪除
-    if(data["isdel"] == "清起來"):
-        print(f'你在【日曆_輸入區：H8】選擇了{data["isdel"]}，要刪除{data["year"]}年{data["month"]}月的個人基準表所有內容嗎?')
-        isdel = int(input('輸入"1"開始刪除，或"0"繼續登打↵\n'))
-    else:
-        isdel = 0
+    if(data["isdel"] == "直接登打"):
+        print(f'你在【日曆_輸入區：H8】選擇了{data["isdel"]}】，直接登打內容')
+        isdel = data["isdel"]
+    elif(data["isdel"] == "清完再打"):
+        print(f'你在【日曆_輸入區：H8】選擇了【{data["isdel"]}】，登打前會刪除{data["year"]}年{data["month"]}月的所有內容')
+        isdel = data["isdel"]
+    elif(data["isdel"] == "一筆都不留"):
+        print(f'你在【日曆_輸入區：H8】選擇了【{data["isdel"]}】，刪除{data["year"]}年{data["month"]}月的所有內容')
+        isdel = data["isdel"]
 
     time.sleep(0.5)
     ################Chrome操作################
@@ -376,7 +445,6 @@ if __name__ == '__main__':
     
     #點選時數上限警告
     alert_click()
-    #點選時數上限警告
     alert_click()
     
     #查詢月份
@@ -391,6 +459,16 @@ if __name__ == '__main__':
     alert_click()   #點選時數上限警告
     sheet_year = wait.until(EC.visibility_of_element_located((By.ID, '_selYEAR')))  #等待
 
+    target_text = data['name']
+    # 找到包含姓名的連結元素
+    element = driver.find_element(
+        By.XPATH,
+        f"//a[contains(., '{target_text}')]"
+    )
+    # 點選姓名連結
+    driver.execute_script("arguments[0].click();", element)
+
+    '''
     #讀取Excel個人資料、操作網頁、點選個人連結
     my_name = data['name']
     my_name_NAME = ''
@@ -403,21 +481,77 @@ if __name__ == '__main__':
             my_name_NAME = '_td_' + str(n) + '_0'
             break
     click_by_name(my_name_NAME)   #點進個人視窗
-
+    '''
     #切換到彈出小視窗
     window_handles = driver.window_handles
     popup_window_handle = window_handles[-1]
     driver.switch_to.window(popup_window_handle)
+    
 
-    #全刪或登打
-    if(isdel):
-        del_all()
-        print(str_line('刪除完成，記得確認喔'))
-    else:  
+    #依模式執行刪除或登打
+    if isdel == "直接登打":
         duty_loading(file_path, user_book, last_day)
         print('\n重複內容檢查中...')   #刪除重複內容
         duplication_clear()
+        print('\n重疊時數檢查中...')
+        overlap_check()
         print(str_line('登打完成，記得確認喔'))
+    elif isdel == "清完再打":
+        del_all()
+        print(str_line('刪除完成，開始登打'))
+
+        duty_loading(file_path, user_book, last_day)
+        print('\n重複內容檢查中...')   #刪除重複內容
+        duplication_clear()
+        print('\n重疊時數檢查中...')
+        overlap_check()
+        print(str_line('登打完成，記得確認喔'))
+    elif isdel == "一筆都不留":
+        del_all()
+        print(str_line('刪除完成，記得確認喔'))
+
+    close_button = driver.find_element(By.ID, '_close')
+    close_button.click()
+
+
+    ###任務完成回到結報畫面###
+    #切換到視窗
+    window_handles = driver.window_handles
+    driver.switch_to.window(window_handles[0])
+
+    #切換到選單Frame|#frameset是組合，不是Frame
+    frameM = driver.find_element(By.NAME, 'ehrFrame')
+    driver.switch_to.frame(frameM)
+
+    #轉換右方主要內容
+    frameR1 = driver.find_element(By.NAME, 'contentFrame')
+    driver.switch_to.frame(frameR1)
+    frameR2 = driver.find_element(By.NAME, 'mainFrame')
+    driver.switch_to.frame(frameR2)
+    
+    #點選時數上限警告
+    alert_click()
+    alert_click()
+
+    click_by_id('_btnQuery')    #點選查詢
+    alert_click()   #點選時數上限警告
+    sheet_year = wait.until(EC.visibility_of_element_located((By.ID, '_selYEAR')))  #等待
+
+    # 找到包含該文字的元素
+    target_text = data['name']    
+    element = driver.find_element(
+        By.XPATH,
+        f"//a[contains(., '{target_text}')]"
+    )
+    #捲動名字到畫面中央
+    driver.execute_script("""
+        arguments[0].scrollIntoView({
+            behavior: 'instant',
+            block: 'center'
+        });
+        """, element)
+
+
     time.sleep(0.5)
-    pau = input('輸入任意鍵結束')
+    pau = input('按下Enter結束程式')
     driver.close()
